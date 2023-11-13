@@ -1,0 +1,17 @@
+# Global parameters
+default:
+    start_date: [2023, 1, 1]
+    max_active_runs: 3
+    # https://airflow.apache.org/docs/stable/scheduler.html#dag-runs
+    schedule_interval: "@once"
+    catchup: false
+    # Default settings applied to all tasks
+    owner: "airflow"
+    depends_on_past: false
+    email_on_failure: false
+    email_on_retry: false
+    retries: 1
+    retry_delay: 5
+
+# Arguments specific to the pipeline (overrides the parameters above)
+docker_image: test-iris:latest
