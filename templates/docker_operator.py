@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 current_dir = "{{ current_dir }}"
+
 # DockerOperator settings
 docker_image = "{{ docker_image }}"
 network_mode = "{{ network_mode | default('bridge') }}"
@@ -27,6 +28,16 @@ env = "{{ env }}"
 pipeline_name = "{{ pipeline_name }}"
 project_path = Path.cwd()
 package_name = "{{ package_name }}"
+
+# MARC ADD
+dag_runs = DagRun.find(dag_id="{{ dag_name | safe }}_{{source}}_{{tags}}")
+last_run = dag_runs[-1] 
+last_from_date = last_run.conf.get("from_date", "2019-01-01")
+date_obj = datetime.strptime(last_from_date, '%Y-%m-%d')
+new_date_obj = date_obj + timedelta(days=1)
+new_from_date = new_date_obj.strftime('%Y-%m-%d')
+# MARC ADD
+
 
 with DAG(
     dag_id="{{ dag_name | safe }}",

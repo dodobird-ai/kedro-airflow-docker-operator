@@ -8,9 +8,20 @@ from kedro.pipeline import Pipeline, node, pipeline
 from .nodes import make_predictions, report_accuracy, split_data
 
 
+def check_date(date:str): 
+    if date != '2000-01-01':
+        raise ValueError(f"{date} != 2000-01-01")
+
 def create_pipeline(**kwargs) -> Pipeline:
     return pipeline(
         [
+
+            node(func=check_date, 
+                 inputs="params:from_date", 
+                 outputs=None,
+                 name="check_date",
+                 ), 
+
             node(
                 func=split_data,
                 inputs=["example_iris_data", "parameters"],
