@@ -3,6 +3,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from airflow import DAG
 from airflow.providers.docker.operators.docker import DockerOperator
+from airflow.models import DagRun
+from airflow.models.param import Param
+from airflow.operators.python import PythonOperator
 from docker.types import Mount
 
 import os
@@ -34,10 +37,13 @@ def determine_dates(**kwargs):
     params = kwargs['params']
     from_date = params.get('from_date')
     to_date = params.get('to_date')
+    from_date = datetime.strptime(from_date, '%Y-%m-%d')
+    to_date = datetime.strptime(to_date, '%Y-%m-%d')
 
     if from_date is None or to_date is None:
         # WARNING: dag_runs are not properly sorted. 
         default_to_date = "1000-01-01"
+        # TODO: we need to sort dag_runs by execution date from oldest to newest
         dag_runs = DagRun.find(dag_id="iris")
         last_to_date = dag_runs[-1].conf.get("to_date", default_to_date)
         try:
@@ -50,9 +56,12 @@ def determine_dates(**kwargs):
 
         from_date = last_to_date
         to_date = from_date + timedelta(days=1)
-    
-    kwargs['ti'].xcom_push(key='from_date', value=from_date)
-    kwargs['ti'].xcom_push(key='to_date', value=to_date)
+
+    from_date_str = from_date.strftime('%Y-%m-%d %H:%M:%S.%f')
+    to_date_str = to_date.strftime('%Y-%m-%d %H:%M:%S.%f')
+
+    kwargs['ti'].xcom_push(key='from_date', value=from_date_str)
+    kwargs['ti'].xcom_push(key='to_date', value=to_date_str)
 
 with DAG(
     dag_id="{{ dag_name | safe }}",
@@ -66,11 +75,16 @@ with DAG(
         email_on_failure={{ email_on_failure | default(False) }},
         email_on_retry={{ email_on_retry | default(False) }},
         retries={{ retries | default(1) }},
-        retry_delay=timedelta(minutes={{ retry_delay | default(5) }})
+        retry_delay=timedelta(minutes={{ retry_delay | default(5) }}),
+        params = {"from_date" : Param(None, type=["null", "string"], format="date"),
+                "to_date" : Param(None, type=["null", "string"], format="date"),
+                } ,
+
+        render_template_as_native_obj=True
     )
 ) as dag:
     
-    var = "{% raw %}{{ task_instance.xcom_pull(task_ids='determine_dates', key='from_date') }}{% endraw %}}"
+    var = "{% raw %}{{ task_instance.xcom_pull(task_ids='determine_dates', key='from_date') }}{% endraw %}"
 
     tasks = {
 
@@ -84,9 +98,9 @@ with DAG(
         "{{ node.name | safe }}": DockerOperator(
             api_version='1.37',
             docker_url='TCP://docker-socket-proxy:2375',  # Adjust as needed
-            command=f"/bin/bash -c 'python -m kedro run --pipeline {pipeline_name}"
-                    " --nodes {{ node.name | safe }} --env {{ env | default(local) }}"
-                    f"--params \'from_date={var}\' ' ",
+            command=f"/bin/bash -c 'python -m kedro run --pipeline {pipeline_name} "
+                    " --nodes {{ node.name | safe }} --env {{ env | default(local) }} "
+                    f"--params from_date=\"{var}\" ' ",
             image=docker_image,
             network_mode=network_mode,
             user=user,
